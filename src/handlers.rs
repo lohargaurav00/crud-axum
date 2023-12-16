@@ -68,10 +68,37 @@ pub async fn read_quotes(
         .fetch_all(&pool)
         .await;
 
-    println!("{:#?}", res);
-
     match res {
         Ok(quotes) => Ok(axum::Json(quotes)),
         Err(_) => Err(http::StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+pub async fn update_quote(
+    extract::State(pool): extract::State<PgPool>,
+    extract::Path(id): extract::Path<Uuid>,
+    Json(payload): Json<CreateQuote>,
+) -> http::StatusCode {
+    let res = sqlx::query(
+        r#"
+        UPDATE quotes
+        SET book = $1, quote = $2, updated_at = $3
+        WHERE id = $4
+        "#,
+    )
+    .bind(&payload.book)
+    .bind(&payload.quote)
+    .bind(&Utc::now())
+    .bind(&id)
+    .execute(&pool)
+    .await
+    .map(|res| match res.rows_affected() {
+        0 => http::StatusCode::NOT_FOUND,
+        _ => http::StatusCode::OK,
+    });
+
+    match res {
+        Ok(status) => status,
+        Err(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
